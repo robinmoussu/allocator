@@ -40,13 +40,12 @@ extern "C" {
 #endif
 
 
-int mem_init();
-void *mem_alloc(unsigned long size);
-int mem_free(void *ptr, unsigned long size);
-int mem_destroy();
+    int mem_init();
+    void *mem_alloc(unsigned long size);
+    int mem_free(void *ptr, unsigned long size);
+    int mem_destroy();
 
 #ifdef __cplusplus
 }
 #endif
-
 #endif
