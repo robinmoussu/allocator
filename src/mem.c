@@ -11,7 +11,7 @@
 #include "mem.h"
 
 // Renvoie 2 à la puissance x
-#define POW_2(x) (1 << x)
+#define POW_2(x) (1 << (x))
 
 // Une zone mémoire (voir explications plus bas)
 // La taille minimale alouable est celle d'un pointeur sur un autre bloc.
@@ -20,12 +20,11 @@ union bloc {
                              // zone est non allouée
     void       *data;        // Les données lorsque la zone est allouée
 };
-#define MIN_SIZE_ALLOC sizeof(union bloc)
 
 struct allocated_space {
-    uint8_t    memory_pool[ALLOC_MEM_SIZE*MIN_SIZE_ALLOC];    // zone mémoire
+    uint8_t    memory_pool[ALLOC_MEM_SIZE];    // zone mémoire
                                 // disponible pour l'utilisateur
-    union bloc *free_bloc[BUDDY_MAX_INDEX];               // zone mémoire
+    union bloc free_bloc[BUDDY_MAX_INDEX];     // zone mémoire
                                 // contenant les données utilisées par
                                 // l'algorithme d'alocation
 };
@@ -34,10 +33,10 @@ struct allocated_space {
 // va allouer
 //
 // Le tableau allocated_space->memory_pool de BUDDY_MAX_INDEX elements pointe
-// sur les zones mémoire libres de taille MIN_SIZE_ALLOC * (2 puissance n)
+// sur les zones mémoire libres de taille 2 puissance n
 // (avec n <= BUDDY_MAX_INDEX).
 //
-// Les blocs allouables ont une taille T(n) = MIN_SIZE_ALLOC * (2 puissance n).
+// Les blocs allouables ont une taille T(n) = 2 puissance n.
 //
 // Les blocs allouables de taille T(n) sont regroupés dans une liste dont le
 // premier élément est allocated_space->free_bloc[n].
@@ -65,11 +64,12 @@ int mem_init()
     }
 
     // À l'initialisation, seul un bloc de de taille maximal (faisant
-    // MIN_SIZE_ALLOC*(2 puissance BUDDY_MAX_INDEX) octets) est disponible.
-    for(int i = 0; i < BUDDY_MAX_INDEX - 2; i++) {
+    // 2 puissance BUDDY_MAX_INDEX octets) est disponible.
+    for(int i = 0; i < BUDDY_MAX_INDEX - 1; i++) {
         memory->free_bloc[i].next_record = 0;
     }
-    memory->free_bloc[BUDDY_MAX_INDEX] = *((union bloc *) &(memory->memory_pool));
+    memory->free_bloc[BUDDY_MAX_INDEX - 1].next_record = (union bloc*) memory->memory_pool;
+    memory->free_bloc[BUDDY_MAX_INDEX - 1].next_record->next_record = 0;
     return 0;
 }
 
@@ -78,9 +78,9 @@ int mem_init()
 int get_index(unsigned long size)
 {
     int index;
-    for (index = 0; POW_2(index)*MIN_SIZE_ALLOC < size; index++) {
+    for (index = 0; POW_2(index) < size; index++) {
         ;}
-    return index;
+    return index - 1;
 }
 
 // Retourne un bloc libre de taille T >= size, tel que
@@ -88,25 +88,33 @@ int get_index(unsigned long size)
 // Retourne 0 si il n'y a pas d'espace disponible.
 void *mem_alloc(unsigned long size)
 {
-    // Pour cela, on cherche tout d'abord dans le tableau
-    // memory.free_bloc si un bloc de cette taille est disponible. Si
-    // cet élément existe, alors il se trouve dans la celulle
-    // (size - 1)/MIN_SIZE_ALLOC
+    int index_celulle;
 
-    union bloc *selected_bloc;
-    int        index_celulle = get_index(size);
+    // On s'assure que la mémoire soit initialisé
+    if (memory == 0) {
+        return 0;
+    }
 
-    // la taille demandé est plus grande que le plus grand bloc disponible.
-    if (index_celulle > BUDDY_MAX_INDEX) {
+    // On s'assure que la taille ne soit pas trop petite
+    if (size == 0) {
+        return 0;
+    }
+    if (size < sizeof(union bloc)) {
+        size = sizeof(union bloc);
+    }
+
+    index_celulle = get_index(size);
+    // On s'assure que la taille demandé soit valide
+    if (index_celulle == BUDDY_MAX_INDEX) {
         return 0;
     }
 
     // Cas 1, un bloc de taille T existe
-    if (memory->free_bloc[index_celulle]->next_record != 0) {
-        selected_bloc = memory->free_bloc[index_celulle];
-        memory->free_bloc[index_celulle] = selected_bloc->next_record;
+    if (memory->free_bloc[index_celulle].next_record != 0) {
+        union bloc selected_bloc = memory->free_bloc[index_celulle];
+        memory->free_bloc[index_celulle].next_record = selected_bloc.next_record->next_record;
 
-        return selected_bloc;
+        return selected_bloc.data;
     }
 
     // Cas 2, il n'existe pas de bloc de taille, on cherche le premier bloc
@@ -114,38 +122,40 @@ void *mem_alloc(unsigned long size)
     // récursivement jusqu'à avoir un bloc de taille T.
     else {
         int i; // l'indice de la cellule de taille T * (2 puissance k)
-        for(i = index_celulle + 1; memory->free_bloc[i]->next_record == 0; i++) {
-            if (i > BUDDY_MAX_INDEX) {
+        for(i = index_celulle + 1; memory->free_bloc[i].next_record == 0; i++) {
+            if (i >= BUDDY_MAX_INDEX) {
                 // la taille demandé est plus grande que le plus grand bloc
                 // disponible.
                 return 0;
             }
         }
-        // On a trouvé un bloc plus grand que necessaire, il faut maintenant le
-        // découper.
-        union bloc *big_bloc = memory->free_bloc[i];
+        // On a trouvé un bloc plus grand que necessaire, il faut maintenant
+        // le découper.
+        union bloc big_bloc = memory->free_bloc[i];
 
         // Tout d'abord on l'enlève de la chaine
-        memory->free_bloc[i] = big_bloc->next_record;
+        memory->free_bloc[i].next_record = big_bloc.next_record->next_record;
 
         // Ensuite on le découpe en 2 récursivement. La taille des sous bloc
-        // est de MIN_SIZE_ALLOC * (2 puissance (i-1)).
+        // est de 2 puissance (i-1).
         // On insère à chaque fois le deuxième sous bloc dans la chaine, et on
         // continue de découper le premier sous-bloc.
-        for(; i > index_celulle; i--) {
-            memory->free_bloc[i - 1] = (union bloc*)
-                (&(big_bloc->data) + MIN_SIZE_ALLOC*POW_2(i - 1));
-            memory->free_bloc[i - 1]->next_record = 0;
+        for(; i > index_celulle + 1; i--) {
+            memory->free_bloc[i - 1] = (union bloc) (
+                big_bloc.data + POW_2(i - 1));
+            memory->free_bloc[i - 1].next_record->next_record = 0;
         }
 
         // On à maintenant un bloc de taille T, qu'on peut retourner
-        return big_bloc;
+        return big_bloc.data;
     }
 }
 
 int mem_free(void *ptr, unsigned long size)
 {
     /* ecrire votre code ici */
+    // NB : cette ligne est là uniquement pour pouvoir utiliser les test en rapport avec l'allocation, elle est évidement à supprimer lorsque mem_free sera implémenté
+    mem_init();
     return 0;
 }
 
