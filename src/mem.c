@@ -20,56 +20,50 @@ union bloc {
                              // zone est non allouée
     void       *data;        // Les données lorsque la zone est allouée
 };
+#define MIN_SIZE_ALLOC sizeof(union bloc)
 
-struct allocated_space {
-    uint8_t    memory_pool[ALLOC_MEM_SIZE];    // zone mémoire
-                                // disponible pour l'utilisateur
-    union bloc free_bloc[BUDDY_MAX_INDEX];     // zone mémoire
-                                // contenant les données utilisées par
-                                // l'algorithme d'alocation
-};
-
-// allocated_spac est le pool de mémoire contenant toutes les données que l'on
-// va allouer
+// L'espace allouable est situé dans le tableau memory_pool, d'une taille de
+// ALLOC_MEM_SIZE octets;
 //
-// Le tableau allocated_space->memory_pool de BUDDY_MAX_INDEX elements pointe
-// sur les zones mémoire libres de taille 2 puissance n
-// (avec n <= BUDDY_MAX_INDEX).
+// Le tableau free_bloc de BUDDY_MAX_INDEX elements pointe sur les zones
+// mémoire libres de taille 2 puissance n (avec n <= BUDDY_MAX_INDEX).
 //
-// Les blocs allouables ont une taille T(n) = 2 puissance n.
+// Les blocs allouables ont une taille T(n) = 2 puissance n, avec pour
+// minimum MIN_SIZE_ALLOC.
 //
 // Les blocs allouables de taille T(n) sont regroupés dans une liste dont le
-// premier élément est allocated_space->free_bloc[n].
+// premier élément est free_bloc[n].
 //
 // Si free_bloc[n] = 0, alors il n'y a pas de blocs de taille T(n) disponible.
 // Si free_bloc[n] = A (avec A une adresse différente de 0), alors le bloc
 // situé à l'adresse A est un bloc prêt à être alloué. De même, si le champ
-// next_record du bloc situé à l'adresse A pointe vers B (avec B != 0), alors le bloc
-// situé à l'adresse B est disponible, et ainsi de suite jusqu'au dernier
-// élément de la chaine (dont le champ next_record == 0).
+// next_record du bloc situé à l'adresse A pointe vers B (avec B != 0), alors
+// le bloc situé à l'adresse B est disponible, et ainsi de suite jusqu'au
+// dernier élément de la chaine (dont le champ next_record == 0).
 //
 // Si un bloc est alloué, alors il ne sera plus présent ni dans le tableau
-// memory->free_bloc, ni dans aucune des sous-chaines. Dans ce cas, seul
+// free_bloc, ni dans aucune des sous-chaines. Dans ce cas, seul
 // le champ data du bloc devient utile.
-static struct allocated_space *memory = 0;
+uint8_t    *memory_pool;
+union bloc free_bloc[BUDDY_MAX_INDEX];
 
 int mem_init()
 {
-    if (!memory) {
-        memory = (void *) malloc( sizeof(struct allocated_space) );
+    if (!memory_pool) {
+        memory_pool = (void *) malloc( ALLOC_MEM_SIZE );
     }
-    if (memory == 0) {
-        perror("mem_init:");
+    if (memory_pool == 0) {
+        perror("Cannot initialise memory\n");
         return -1;
     }
 
     // À l'initialisation, seul un bloc de de taille maximal (faisant
     // 2 puissance BUDDY_MAX_INDEX octets) est disponible.
     for(int i = 0; i < BUDDY_MAX_INDEX - 1; i++) {
-        memory->free_bloc[i].next_record = 0;
+        free_bloc[i].next_record = 0;
     }
-    memory->free_bloc[BUDDY_MAX_INDEX - 1].next_record = (union bloc*) memory->memory_pool;
-    memory->free_bloc[BUDDY_MAX_INDEX - 1].next_record->next_record = 0;
+    free_bloc[BUDDY_MAX_INDEX - 1].next_record = (union bloc*) memory_pool;
+    free_bloc[BUDDY_MAX_INDEX - 1].next_record->next_record = 0;
     return 0;
 }
 
@@ -91,16 +85,18 @@ void *mem_alloc(unsigned long size)
     int index_celulle;
 
     // On s'assure que la mémoire soit initialisé
-    if (memory == 0) {
+    if (memory_pool == 0) {
+        perror("Memory not intitialized\n");
         return 0;
     }
 
-    // On s'assure que la taille ne soit pas trop petite
+    // On s'assure que la taille ne soit pas nulle
     if (size == 0) {
+        perror("Request of 0 byte allocation\n");
         return 0;
     }
-    if (size < sizeof(union bloc)) {
-        size = sizeof(union bloc);
+    if (size < MIN_SIZE_ALLOC) {
+        size = MIN_SIZE_ALLOC;
     }
 
     index_celulle = get_index(size);
@@ -110,9 +106,9 @@ void *mem_alloc(unsigned long size)
     }
 
     // Cas 1, un bloc de taille T existe
-    if (memory->free_bloc[index_celulle].next_record != 0) {
-        union bloc selected_bloc = memory->free_bloc[index_celulle];
-        memory->free_bloc[index_celulle].next_record = selected_bloc.next_record->next_record;
+    if (free_bloc[index_celulle].next_record != 0) {
+        union bloc selected_bloc = free_bloc[index_celulle];
+        free_bloc[index_celulle].next_record = selected_bloc.next_record->next_record;
 
         return selected_bloc.data;
     }
@@ -122,28 +118,31 @@ void *mem_alloc(unsigned long size)
     // récursivement jusqu'à avoir un bloc de taille T.
     else {
         int i; // l'indice de la cellule de taille T * (2 puissance k)
-        for(i = index_celulle + 1; memory->free_bloc[i].next_record == 0; i++) {
-            if (i >= BUDDY_MAX_INDEX) {
-                // la taille demandé est plus grande que le plus grand bloc
-                // disponible.
-                return 0;
-            }
+        for(i = index_celulle + 1; (i < BUDDY_MAX_INDEX)
+                && (free_bloc[i].next_record == 0); i++) {
         }
+        if (i >= BUDDY_MAX_INDEX) {
+            // la taille demandé est plus grande que le plus grand bloc
+            // disponible.
+            perror("Not enough availlable space\n");
+            return 0;
+        }
+
         // On a trouvé un bloc plus grand que necessaire, il faut maintenant
         // le découper.
-        union bloc big_bloc = memory->free_bloc[i];
+        union bloc big_bloc = free_bloc[i];
 
         // Tout d'abord on l'enlève de la chaine
-        memory->free_bloc[i].next_record = big_bloc.next_record->next_record;
+        free_bloc[i].next_record = big_bloc.next_record->next_record;
 
         // Ensuite on le découpe en 2 récursivement. La taille des sous bloc
-        // est de 2 puissance (i-1).
-        // On insère à chaque fois le deuxième sous bloc dans la chaine, et on
-        // continue de découper le premier sous-bloc.
+        // est de 2 puissance (i-1). On insère à chaque fois le deuxième sous
+        // bloc dans la chaine, et on continue de découper le premier
+        // sous-bloc.
         for(; i > index_celulle + 1; i--) {
-            memory->free_bloc[i - 1] = (union bloc) (
+            free_bloc[i - 1] = (union bloc) (
                 big_bloc.data + POW_2(i - 1));
-            memory->free_bloc[i - 1].next_record->next_record = 0;
+            free_bloc[i - 1].next_record->next_record = 0;
         }
 
         // On à maintenant un bloc de taille T, qu'on peut retourner
@@ -164,7 +163,7 @@ int mem_destroy()
 {
     /* ecrire votre code ici */
 
-    free(memory);
-    memory = 0;
+    free(memory_pool);
+    memory_pool = 0;
     return 0;
 }
