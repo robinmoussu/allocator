@@ -161,8 +161,6 @@ int mem_free(void *ptr, unsigned long size)
 
 int mem_destroy()
 {
-    /* ecrire votre code ici */
-
     free(memory_pool);
     memory_pool = 0;
     return 0;
