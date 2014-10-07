@@ -140,7 +140,7 @@ void *mem_alloc(unsigned long size)
         // bloc dans la chaine, et on continue de découper le premier
         // sous-bloc.
         for(; i > index_celulle + 1; i--) {
-            free_bloc[i - 1] = (union bloc) (
+            free_bloc[i - 1].next_record = (union bloc*) (
                 big_bloc.data + POW_2(i - 1));
             free_bloc[i - 1].next_record->next_record = 0;
         }
