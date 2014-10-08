@@ -27,7 +27,7 @@ Utilisation
 
 > `make`
 
-> `make test`
+> `make gtest`
 
 
 
