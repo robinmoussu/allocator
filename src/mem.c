@@ -10,8 +10,15 @@
 #include <stdint.h>
 #include "mem.h"
 
+//////////////////////////////////////////////////////////////////////////////
+
 // Renvoie 2 à la puissance x
 #define POW_2(x) (1 << (x))
+
+// Renvoie l'index dans le tableau free_bloc du bloc de taille size
+int get_index(unsigned long size);
+
+//////////////////////////////////////////////////////////////////////////////
 
 // Une zone mémoire (voir explications plus bas)
 // La taille minimale alouable est celle d'un pointeur sur un autre bloc.
@@ -46,6 +53,8 @@ union bloc {
 // le champ data du bloc devient utile.
 uint8_t    *memory_pool;
 union bloc free_bloc[BUDDY_MAX_INDEX];
+
+//////////////////////////////////////////////////////////////////////////////
 
 int mem_init()
 {
