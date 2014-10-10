@@ -52,11 +52,12 @@ union bloc {
 // free_bloc, ni dans aucune des sous-chaines. Dans ce cas, seul
 // le champ data du bloc devient utile.
 uint8_t    *memory_pool;
-union bloc free_bloc[size_free_bloc()];
+//int size_free_bloc();
+union bloc free_bloc[BUDDY_MAX_INDEX];
 //////////////////////////////////////////////////////////////////////////////
 
 //Retourne la taille du tableau free_bloc
-int size_free_bloc()
+/*int size_free_bloc()
 {
     int k = 1 ;
     int i = 0 ;
@@ -66,7 +67,7 @@ int size_free_bloc()
         i++;
     }
     return i;
-}
+}*/
 
 int mem_init()
 {
@@ -105,9 +106,9 @@ void *mem_alloc(unsigned long size)
 {
     int index_celulle;
 
-    // On s'assure que la mémoire soit initialisé
+    // On s'assure que la mémoire soit initialisée
     if (memory_pool == 0) {
-        perror("Memory not intitialized\n");
+        perror("Memory not initialized\n");
         return 0;
     }
 
@@ -121,7 +122,7 @@ void *mem_alloc(unsigned long size)
     }
 
     index_celulle = get_index(size);
-    // On s'assure que la taille demandé soit valide
+    // On s'assure que la taille demandée soit valide
     if (index_celulle == BUDDY_MAX_INDEX) {
         return 0;
     }
@@ -134,7 +135,7 @@ void *mem_alloc(unsigned long size)
         return selected_bloc.data;
     }
 
-    // Cas 2, il n'existe pas de bloc de taille, on cherche le premier bloc
+    // Cas 2, il n'existe pas de bloc de taille T, on cherche le premier bloc
     // disponible de taille T * (2 puissance k), et on le découpe en 2
     // récursivement jusqu'à avoir un bloc de taille T.
     else {
@@ -143,7 +144,7 @@ void *mem_alloc(unsigned long size)
                 && (free_bloc[i].next_record == 0); i++) {
         }
         if (i >= BUDDY_MAX_INDEX) {
-            // la taille demandé est plus grande que le plus grand bloc
+            // la taille demandée est plus grande que le plus grand bloc
             // disponible.
             perror("Not enough availlable space\n");
             return 0;
@@ -156,7 +157,7 @@ void *mem_alloc(unsigned long size)
         // Tout d'abord on l'enlève de la chaine
         free_bloc[i].next_record = big_bloc.next_record->next_record;
 
-        // Ensuite on le découpe en 2 récursivement. La taille des sous bloc
+        // Ensuite on le découpe en 2 récursivement. La taille des sous blocs
         // est de 2 puissance (i-1). On insère à chaque fois le deuxième sous
         // bloc dans la chaine, et on continue de découper le premier
         // sous-bloc.
@@ -173,7 +174,21 @@ void *mem_alloc(unsigned long size)
 
 int mem_free(void *ptr, unsigned long size)
 {
-    /* ecrire votre code ici */
+    if (size == 0) {
+        perror("Nothing to free\n");
+        return -1;
+    }
+    if (ptr == free_bloc) {
+
+    }
+    //nb_blocs_before est le nombre de blocs mémoire de taille size entre le début du tableau free_bloc et l'adresse à libérer
+    nb_blocs_before = ((unsigned long) ptr - (unsigned long) free_bloc) / size;
+    if ( nb_blocs_before % 2 == 1) {
+        
+    }
+    else {
+
+    }
     // NB : cette ligne est là uniquement pour pouvoir utiliser les test en rapport avec l'allocation, elle est évidement à supprimer lorsque mem_free sera implémenté
     mem_init();
     return 0;
