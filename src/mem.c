@@ -22,12 +22,12 @@ union bloc {
 struct allocated_space {
     uint8_t    memory_pool[ALLOC_MEM_SIZE*MIN_SIZE_ALLOC];    // zone mémoire
                                 // disponible pour l'utilisateur
-    union bloc free_space[BUDDY_MAX_INDEX];               // zone mémoire
+    union bloc free_space[BUDDY_MAX_INDEX]; /*LA TAILLE NE DOIT-ELLE PAS ETRE DE BUDDYMAX_INDEX + 1 ???*/              // zone mémoire
                                 // contenant les données utilisées par
                                 // l'algorithme d'alocation
 };
 
-// allocated_spac est le pool de mémoire contenant toutes les données que l'on
+// allocated_space est le pool de mémoire contenant toutes les données que l'on
 // va allouer
 //
 // Le tableau allocated_space->memory_pool de BUDDY_MAX_INDEX elements pointe
@@ -45,7 +45,7 @@ struct allocated_space {
 // next_record du bloc situé à l'adresse A pointe vers B (avec B != 0), alors le bloc
 // situé à l'adresse B est disponible, et ainsi de suite jusqu'au dernier
 // élément de la chaine (dont le champ next_record == 0).
-//
+
 // Si un bloc est alloué, alors il ne sera plus présent ni dans le tableau
 // memory_space->free_space, ni dans aucune des sous-chaines. Dans ce cas, seul
 // le champ data du bloc devient utile.
@@ -67,7 +67,7 @@ int mem_init()
         memory_space->free_space[i].next_record = 0;
     }
     memory_space->free_space[BUDDY_MAX_INDEX] = *((union bloc *) &(memory_space->memory_pool));
-    return 0;
+    return 0;//l'index ici ne doit it pas être BUDDY_MAX_INDEX - 1 ??? (dans le cas ou la taille de Free_space est de BUDDY_MAX_INDEX et non de BUDDY_MAX_INDEX+1)
 }
 
 void *mem_alloc(unsigned long size)
