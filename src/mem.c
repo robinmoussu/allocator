@@ -32,8 +32,8 @@ union bloc {
 // L'espace allouable est situé dans le tableau memory_pool, d'une taille de
 // ALLOC_MEM_SIZE octets;
 //
-// Le tableau free_bloc de BUDDY_MAX_INDEX elements pointe sur les zones
-// mémoire libres de taille 2 puissance n (avec n <= BUDDY_MAX_INDEX).
+// Le tableau free_bloc de BUDDY_MAX_INDEX elements contient des pointeurs sur les zones
+// mémoire libres de taille 2 puissance n (avec n < BUDDY_MAX_INDEX).
 //
 // Les blocs allouables ont une taille T(n) = 2 puissance n, avec pour
 // minimum MIN_SIZE_ALLOC.
@@ -52,9 +52,21 @@ union bloc {
 // free_bloc, ni dans aucune des sous-chaines. Dans ce cas, seul
 // le champ data du bloc devient utile.
 uint8_t    *memory_pool;
-union bloc free_bloc[BUDDY_MAX_INDEX];
-
+union bloc free_bloc[size_free_bloc()];
 //////////////////////////////////////////////////////////////////////////////
+
+//Retourne la taille du tableau free_bloc
+int size_free_bloc()
+{
+    int k = 1 ;
+    int i = 0 ;
+    while (k * MIN_SIZE_ALLOC <  ALLOC_MEM_SIZE)
+    {
+        k *= 2;
+        i++;
+    }
+    return i;
+}
 
 int mem_init()
 {
@@ -76,8 +88,8 @@ int mem_init()
     return 0;
 }
 
-// Retourne l'index de la première cellule de taille T >= size tel que
-// 2 puissance k ≤ T < 2 puissance (k+1) dans le tableau memory.free_bloc
+// Retourne l'index de la première cellule de taille 2 puissance k >= size tel que
+// 2 puissance k-1 ≤ size < 2 puissance k dans le tableau memory.free_bloc
 int get_index(unsigned long size)
 {
     int index;
