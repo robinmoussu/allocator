@@ -181,11 +181,19 @@ int mem_free(void *ptr, unsigned long size)
     if (ptr == free_bloc) {
 
     }
-    //nb_blocs_before est le nombre de blocs mémoire de taille size entre le début du tableau free_bloc et l'adresse à libérer
+    //nb_blocs_before est le nombre de blocs mémoire de taille size entre
+    //le début du tableau free_bloc et l'adresse à libérer
     nb_blocs_before = ((unsigned long) ptr - (unsigned long) free_bloc) / size;
+    //Si le nombre est impaire, cela veut dire que ptr pointe vers la
+    //deuxième zone d'un couple de compagnons => on doit donc regarder si
+    //la première zone est libre.
+
     if ( nb_blocs_before % 2 == 1) {
         
     }
+    //Si le nombre est paire, cela veut dire que ptr pointe vers la
+    //première zone d'un couple de compagnons => on doit donc regarder
+    //si la deuxième zone est libre.
     else {
 
     }
