@@ -174,29 +174,63 @@ void *mem_alloc(unsigned long size)
 
 int mem_free(void *ptr, unsigned long size)
 {
+    unsigned long nb_blocs_before = 0;
     if (size == 0) {
         perror("Nothing to free\n");
         return -1;
     }
-    if (ptr == free_bloc) {
-
+    else if (size == ALLOC_MEM_SIZE && ptr == memory_pool) {
+        return mem_destroy();
     }
-    //nb_blocs_before est le nombre de blocs mémoire de taille size entre
+    else {
+
+  //nb_blocs_before est le nombre de blocs mémoire de taille size entre
     //le début du tableau free_bloc et l'adresse à libérer
     nb_blocs_before = ((unsigned long) ptr - (unsigned long) free_bloc) / size;
+
     //Si le nombre est impaire, cela veut dire que ptr pointe vers la
     //deuxième zone d'un couple de compagnons => on doit donc regarder si
     //la première zone est libre.
-
     if ( nb_blocs_before % 2 == 1) {
-        
+        int i = get_index(size);
+        union bloc *browse = free_bloc[i].next_record;
+        //On parcourt la liste des zones libres de taille size tant qu'on
+        //ne tombe pas sur NULL ou la première zone du couple de compagnons
+        while (browse != 0 && browse != (union bloc*) ((unsigned long) ptr - size)) {
+            browse = browse->next_record;
+        }
+        if(browse == 0) {
+            ((union bloc*) ptr)->next_record = free_bloc[i].next_record;
+            free_bloc[i].next_record = ptr;
+            return 0;
+        }
+        else {
+            mem_free(browse, size * 2);
+        }
     }
-    //Si le nombre est paire, cela veut dire que ptr pointe vers la
+    //Si le nombre est paire, cela veut dire que ptr pointe vers lane
     //première zone d'un couple de compagnons => on doit donc regarder
     //si la deuxième zone est libre.
     else {
+        int i = get_index(size);
+        union bloc *browse = free_bloc[i].next_record;
+        //On parcourt la liste des zones libres de taille size tant qu'on
+        //ne tombe pas sur NULL ou la première zone du couple de compagnons
+        while (browse != 0 && browse != (union bloc*) ((unsigned long) ptr + size)) {
+            browse = browse->next_record;
+        }
+        if(browse == 0) {
+            ((union bloc*) ptr)->next_record = free_bloc[i].next_record;
+            free_bloc[i].next_record = ptr;
+            return 0;
+        }
+        else {
+            mem_free(browse, size * 2);
+        }
 
     }
+
+}
     // NB : cette ligne est là uniquement pour pouvoir utiliser les test en rapport avec l'allocation, elle est évidement à supprimer lorsque mem_free sera implémenté
     mem_init();
     return 0;
