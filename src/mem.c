@@ -32,8 +32,8 @@ union bloc {
 // L'espace allouable est situé dans le tableau memory_pool, d'une taille de
 // ALLOC_MEM_SIZE octets;
 //
-// Le tableau free_bloc de BUDDY_MAX_INDEX elements contient des pointeurs sur les zones
-// mémoire libres de taille 2 puissance n (avec n < BUDDY_MAX_INDEX).
+// Le tableau free_bloc de BUDDY_MAX_INDEX + 1 elements contient des pointeurs sur les zones
+// mémoire libres de taille 2 puissance n (avec 0 <= n <= BUDDY_MAX_INDEX).
 //
 // Les blocs allouables ont une taille T(n) = 2 puissance n, avec pour
 // minimum MIN_SIZE_ALLOC.
@@ -129,8 +129,10 @@ void *mem_alloc(unsigned long size)
     if (index_celulle == BUDDY_MAX_INDEX) {
         if (free_bloc[BUDDY_MAX_INDEX].next_record == 0)
             return 0;
-        else
+        else {
+            free_bloc[BUDDY_MAX_INDEX].next_record = 0;
             return memory_pool;
+        }
     }
 
     // Cas 1, un bloc de taille T existe
@@ -191,7 +193,7 @@ int mem_free(void *ptr, unsigned long size)
         fprintf(stderr, "%p ptr, %p memory_pool, %ld size\n", ptr, memory_pool, size);
         perror("Invalid pointor to free\n");
         return -1;*/
-        if((uint8_t*) ptr < memory_pool || (uint8_t*) (ptr + size) > memory_pool + ALLOC_MEM_SIZE ) {
+        if((uint8_t*) ptr < memory_pool || (uint8_t*) ptr > memory_pool + ALLOC_MEM_SIZE ) {
         perror("Cannot free what hasn't been allocated\n");
         return -1;
     } else if (size == ALLOC_MEM_SIZE && ptr2free == (union bloc*) memory_pool) {
