@@ -53,7 +53,7 @@ union bloc {
 // le champ data du bloc devient utile.
 static uint8_t    *memory_pool = 0;
 //int size_free_bloc();
-static union bloc free_bloc[BUDDY_MAX_INDEX];
+static union bloc free_bloc[BUDDY_MAX_INDEX + 1];
 //////////////////////////////////////////////////////////////////////////////
 
 int mem_init()
@@ -68,15 +68,21 @@ int mem_init()
 
     // À l'initialisation, seul un bloc de de taille maximal (faisant
     // 2 puissance BUDDY_MAX_INDEX octets) est disponible.
-    for(int i = 0; i < BUDDY_MAX_INDEX - 1; i++) {
+    /*for(int i = 0; i < BUDDY_MAX_INDEX - 1; i++) {
         free_bloc[i].next_record = 0;
     }
     free_bloc[BUDDY_MAX_INDEX - 1].next_record = (union bloc*) memory_pool;
-    free_bloc[BUDDY_MAX_INDEX - 1].next_record->next_record = NULL;
+    free_bloc[BUDDY_MAX_INDEX - 1].next_record->next_record = NULL;*/
+    
+    for(int i = 0; i < BUDDY_MAX_INDEX ; i++) {
+        free_bloc[i].next_record = 0;
+    }
+    free_bloc[BUDDY_MAX_INDEX].next_record = (union bloc*) memory_pool;
+    free_bloc[BUDDY_MAX_INDEX].next_record->next_record = NULL;
     return 0;
 }
 
-// Retourne l'index de la première cellule de taille 2 puissance k >= size tel que
+/*// Retourne l'index de la première cellule de taille 2 puissance k >= size tel que
 // 2 puissance k-1 ≤ size < 2 puissance k dans le tableau memory.free_bloc
 int get_index(unsigned long size)
 {
@@ -84,6 +90,16 @@ int get_index(unsigned long size)
     for (index = 0; POW_2(index) < size; index++) {
         ;}
     return index - 1;
+}*/
+
+// Retourne l'index de la première cellule de taille 2 puissance k >= size tel que
+// 2 puissance k-1 < size <= 2 puissance k dans le tableau memory.free_bloc
+int get_index(unsigned long size)
+{
+    int index;
+    for (index = 0; POW_2(index) < size; index++) {
+        ;}
+    return index/*-1*/;
 }
 
 // Retourne un bloc libre de taille T >= size, tel que
@@ -111,7 +127,10 @@ void *mem_alloc(unsigned long size)
     index_celulle = get_index(size);
     // On s'assure que la taille demandée soit valide
     if (index_celulle == BUDDY_MAX_INDEX) {
-        return 0;
+        if (free_bloc[BUDDY_MAX_INDEX].next_record == 0)
+            return 0;
+        else
+            return memory_pool;
     }
 
     // Cas 1, un bloc de taille T existe
@@ -127,10 +146,10 @@ void *mem_alloc(unsigned long size)
     // récursivement jusqu'à avoir un bloc de taille T.
     else {
         int i; // l'indice de la cellule de taille T * (2 puissance k)
-        for(i = index_celulle + 1; (i < BUDDY_MAX_INDEX)
+        for(i = index_celulle + 1; (i <= BUDDY_MAX_INDEX)
                 && (free_bloc[i].next_record == 0); i++) {
         }
-        if (i >= BUDDY_MAX_INDEX) {
+        if (i > BUDDY_MAX_INDEX) /*Ici avant c'était >=*/{
             // la taille demandée est plus grande que le plus grand bloc
             // disponible.
             perror("Not enough availlable space\n");
@@ -148,7 +167,7 @@ void *mem_alloc(unsigned long size)
         // est de 2 puissance (i-1). On insère à chaque fois le deuxième sous
         // bloc dans la chaine, et on continue de découper le premier
         // sous-bloc.
-        for(; i > index_celulle + 1; i--) {
+        for(; i > index_celulle ; i--) {
             free_bloc[i - 1].next_record = (union bloc*) (
                 big_bloc.data + POW_2(i - 1));
             free_bloc[i - 1].next_record->next_record = 0;
@@ -161,20 +180,24 @@ void *mem_alloc(unsigned long size)
 
 int mem_free(void *ptr, unsigned long size)
 {
-    union bloc *ptr2free = ptr;
+    union bloc *ptr2free = NULL;
+    ptr2free = ptr;
 
     if (size == 0) {
         perror("Nothing to free\n");
         return -1;
-    } else if (((void*) ptr < (void*) memory_pool)
+    } else /*if (((void*) ptr < (void*) memory_pool)
             || ((void*) ptr2free > (void *) memory_pool + size)) {
         fprintf(stderr, "%p ptr, %p memory_pool, %ld size\n", ptr, memory_pool, size);
         perror("Invalid pointor to free\n");
+        return -1;*/
+        if((uint8_t*) ptr < memory_pool || (uint8_t*) (ptr + size) > memory_pool + ALLOC_MEM_SIZE ) {
+        perror("Cannot free what hasn't been allocated\n");
         return -1;
     } else if (size == ALLOC_MEM_SIZE && ptr2free == (union bloc*) memory_pool) {
         return mem_init();
     } else if (size > ALLOC_MEM_SIZE) {
-        perror("Invalid desalocation\n");
+        perror("Cannot free more than what has been allocated\n");
         return -1;
     }
 
@@ -184,8 +207,8 @@ int mem_free(void *ptr, unsigned long size)
 
     //nb_blocs_before est le nombre de blocs mémoire de taille size entre
     //le début du tableau free_bloc et l'adresse à libérer
-    unsigned long nb_blocs_before = (ptr2free - free_bloc) / size;
-
+    unsigned long nb_blocs_before = ((unsigned long) ptr2free - (unsigned long) memory_pool) / size;
+ /*
     //Si le nombre est impaire, cela veut dire que ptr2free pointe vers la
     //deuxième zone d'un couple de compagnons => on doit donc regarder si
     //la première zone est libre.
@@ -223,6 +246,71 @@ int mem_free(void *ptr, unsigned long size)
         mem_free(left, size * 2);
     }
 
+    return 0;*/
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    if ( nb_blocs_before % 2 == 1) {
+            int i = get_index(size);
+            union bloc *browse = free_bloc[i].next_record;
+            union bloc *previous = NULL;
+            //On parcourt la liste des zones libres de taille size tant qu'on
+            //ne tombe pas sur NULL ou la première zone du couple de compagnons
+            while (browse != 0 && browse != (union bloc*) ((unsigned long) ptr - size)) {
+                previous = browse;
+                browse = browse->next_record;
+            }
+            if(browse == 0) {
+                ptr2free->next_record = free_bloc[i].next_record;
+                free_bloc[i].next_record = ptr2free;
+                return 0;
+            }
+            else {
+                if(previous != 0) {
+                    previous->next_record = browse->next_record;
+                }
+                ptr2free = browse;
+                ptr2free->next_record = free_bloc[i + 1].next_record;
+                free_bloc[i + 1].next_record = ptr2free;
+                mem_free(ptr2free, size * 2);
+            }
+        }
+        //Si le nombre est paire, cela veut dire que ptr pointe vers la
+        //première zone d'un couple de compagnons => on doit donc regarder
+        //si la deuxième zone est libre.
+        else {
+            int i = get_index(size);
+            union bloc *browse = free_bloc[i].next_record;
+            union bloc *previous = NULL;
+            //On parcourt la liste des zones libres de taille size tant qu'on
+            //ne tombe pas sur NULL ou la première zone du couple de compagnons
+            while (browse != 0 && browse != (union bloc*) ((unsigned long) ptr + size)) {
+                previous = browse;
+                browse = browse->next_record;
+            }
+            if(browse == 0) {
+                ptr2free->next_record = free_bloc[i].next_record;
+                free_bloc[i].next_record = ptr2free;
+                return 0;
+            }
+            else {
+                if(previous != 0) {
+                    previous->next_record = browse->next_record;
+                }
+                ptr2free->next_record = free_bloc[i + 1].next_record;
+                free_bloc[i + 1].next_record = ptr2free;
+                mem_free(ptr2free, size * 2);
+            }
+        }
+    
     return 0;
 }
 
