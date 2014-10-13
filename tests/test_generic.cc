@@ -14,6 +14,7 @@
 #include "test_generic.h"
 
 TEST(Init, noinit) {
+  mem_destroy();
   ASSERT_EQ( mem_alloc(64), (void *)0 );
 }
 
