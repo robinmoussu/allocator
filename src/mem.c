@@ -182,113 +182,60 @@ void *mem_alloc(unsigned long size)
 
 int mem_free(void *ptr, unsigned long size)
 {
-    union bloc *ptr2free = NULL;
     /*Changement de variable pour éviter les casts à foison*/
+    union bloc *ptr2free = NULL;
     ptr2free = ptr;
+    /*cpt compte le nombre de fois ou l'on change de case libre de même taille*/
     int cpt = -2;
+    /*cpt_max sert à limiter le nombre de fois ou l'on change de cases libres de même taille afin d'éviter les boucles infinies*/
     int cpt_max = ALLOC_MEM_SIZE / MIN_SIZE_ALLOC;
+    
     if (size == 0) {
         perror("Nothing to free\n");
         return -1;
-    } else /*if (((void*) ptr < (void*) memory_pool)
-            || ((void*) ptr2free > (void *) memory_pool + size)) {
-        fprintf(stderr, "%p ptr, %p memory_pool, %ld size\n", ptr, memory_pool, size);
-        perror("Invalid pointor to free\n");
-        return -1;*/
-    if(ptr2free < memory_pool || (uint8_t*) ((unsigned long)ptr + size) > memory_pool + ALLOC_MEM_SIZE   || (uint8_t*) ptr > memory_pool + ALLOC_MEM_SIZE ){
+    }
+    /*TOUT l'espace mémoire a libérer doit faire partie de l'espace mémoire qui a été aloué par le malloc de mem_init()*/
+    else if((uint8_t *)ptr < memory_pool || (uint8_t*) ((unsigned long)ptr + size) > memory_pool + ALLOC_MEM_SIZE   || (uint8_t*) ptr > memory_pool + ALLOC_MEM_SIZE ) {
         perror("Cannot free what hasn't been allocated\n");
         return -1;
-    } else if (size == ALLOC_MEM_SIZE && ptr2free == (union bloc*) memory_pool) {
-        return mem_init();
-    } else if (size > ALLOC_MEM_SIZE) {
-        perror("Cannot free more than what has been allocated\n");
-        return -1;
     }
-
+    else if (size == ALLOC_MEM_SIZE && ptr2free == (union bloc*) memory_pool) {
+        return mem_init();
+    }
     if (size <= MIN_SIZE_ALLOC) {
         size = MIN_SIZE_ALLOC;
     }
-
     //nb_blocs_before est le nombre de blocs mémoire de taille size entre
     //le début du tableau free_bloc et l'adresse à libérer
     unsigned long nb_blocs_before = ((unsigned long) ptr2free - (unsigned long) memory_pool) / size;
- /*
-    //Si le nombre est impaire, cela veut dire que ptr2free pointe vers la
+    //Si nb_blocs_before est impaire, cela veut dire que ptr pointe vers la
     //deuxième zone d'un couple de compagnons => on doit donc regarder si
     //la première zone est libre.
-    union bloc *buddy;
-    union bloc *left;    // le bloc aligné à gauche (entre ptr2free et buddy)
-    if ( nb_blocs_before % 2 == 1) {
-        buddy = ptr2free - size;
-        left  = buddy;
-    } else {
-        buddy = ptr2free + size;
-        left  = ptr2free;
-    }
-
-    int              i = get_index(size);
-    union bloc *browse = free_bloc[i].next_record;
-    union bloc *prev   = 0;
-    //On parcourt la liste des zones libres de taille size tant qu'on
-    //ne tombe pas sur NULL ou la première zone du couple de compagnons
-    while (browse != 0 && browse != buddy) {
-        prev = browse;
-        browse = browse->next_record;
-    }
-    if(browse == 0) {
-        ptr2free->next_record = free_bloc[i].next_record;
-        free_bloc[i].next_record = ptr2free;
-    } else {
-        if ( nb_blocs_before % 2 == 0) {
-            browse = free_bloc[i].next_record;
-            while (browse != 0 && browse != ptr2free) {
-                prev = browse;
-                browse = browse->next_record;
-            }
-        }
-        prev->next_record = browse->next_record;
-        mem_free(left, size * 2);
-    }
-
-    return 0;*/
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     if ( nb_blocs_before % 2 == 1) {
             int i = get_index(size);
             union bloc *browse = free_bloc[i].next_record;
             union bloc *previous = NULL;
             //On parcourt la liste des zones libres de taille size tant qu'on
-            //ne tombe pas sur NULL ou la première zone du couple de compagnons
-            while (browse != 0 
-            && browse != (union bloc*) ((unsigned long) ptr - size) 
-            && browse->next_record != free_bloc[i].next_record
-            && browse != browse->next_record
-            && cpt < cpt_max
-            ) {
+            //ne tombe pas sur NULL ou la première zone du couple de compagnons ou une chaine infinie
+            while (browse != 0  && browse != (union bloc*) ((unsigned long) ptr - size) 
+                                && browse->next_record != free_bloc[i].next_record
+                                && browse != browse->next_record
+                                && cpt < cpt_max) {
                 previous = browse;
                 browse = browse->next_record;
-                               if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
-                        {
-                            browse = 0;
-                            perror("Erreur impaire\n");
-                        }
-                        if(browse == ptr2free)
-                            {
-                                perror("Cannot free what is already available");    
-                                return -1;
-                            }
-                        if (browse != 0)
-                            if (browse->next_record == previous)
-                                break;
+                if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
+                    {
+                        browse = 0;
+                        perror("Erreur impaire\n");
+                    }
+                if(browse == ptr2free)
+                    {
+                        perror("Cannot free what is already available");    
+                        return -1;
+                    }
+                if (browse != 0)
+                    if (browse->next_record == previous)
+                        break;
                 cpt++;
             }
             if(cpt == cpt_max)
@@ -319,7 +266,7 @@ int mem_free(void *ptr, unsigned long size)
             union bloc *browse = free_bloc[i].next_record;
             union bloc *previous = NULL;
             //On parcourt la liste des zones libres de taille size tant qu'on
-            //ne tombe pas sur NULL ou la première zone du couple de compagnons
+            //ne tombe pas sur NULL ou la première zone du couple de compagnons ou une chaine infinie
             while (browse != 0 
             && browse != (union bloc*) ((unsigned long) ptr + size) 
             && browse != browse->next_record 
@@ -327,7 +274,6 @@ int mem_free(void *ptr, unsigned long size)
             && cpt < cpt_max) {
                 previous = browse;
                 browse = browse->next_record;
-                /*if (browse != 0)*/
                     if (browse == previous || browse == 0)
                         break;
                     if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
