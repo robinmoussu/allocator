@@ -183,8 +183,10 @@ void *mem_alloc(unsigned long size)
 int mem_free(void *ptr, unsigned long size)
 {
     union bloc *ptr2free = NULL;
+    /*Changement de variable pour éviter les casts à foison*/
     ptr2free = ptr;
-
+    int cpt = -2;
+    int cpt_max = ALLOC_MEM_SIZE / MIN_SIZE_ALLOC;
     if (size == 0) {
         perror("Nothing to free\n");
         return -1;
@@ -193,7 +195,7 @@ int mem_free(void *ptr, unsigned long size)
         fprintf(stderr, "%p ptr, %p memory_pool, %ld size\n", ptr, memory_pool, size);
         perror("Invalid pointor to free\n");
         return -1;*/
-        if((uint8_t*) ptr < memory_pool || (uint8_t*) ptr > memory_pool + ALLOC_MEM_SIZE ) {
+    if(ptr2free < memory_pool || (uint8_t*) ((unsigned long)ptr + size) > memory_pool + ALLOC_MEM_SIZE   || (uint8_t*) ptr > memory_pool + ALLOC_MEM_SIZE ){
         perror("Cannot free what hasn't been allocated\n");
         return -1;
     } else if (size == ALLOC_MEM_SIZE && ptr2free == (union bloc*) memory_pool) {
@@ -266,9 +268,33 @@ int mem_free(void *ptr, unsigned long size)
             union bloc *previous = NULL;
             //On parcourt la liste des zones libres de taille size tant qu'on
             //ne tombe pas sur NULL ou la première zone du couple de compagnons
-            while (browse != 0 && browse != (union bloc*) ((unsigned long) ptr - size)) {
+            while (browse != 0 
+            && browse != (union bloc*) ((unsigned long) ptr - size) 
+            && browse->next_record != free_bloc[i].next_record
+            && browse != browse->next_record
+            && cpt < cpt_max
+            ) {
                 previous = browse;
                 browse = browse->next_record;
+                               if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
+                        {
+                            browse = 0;
+                            perror("Erreur impaire\n");
+                        }
+                        if(browse == ptr2free)
+                            {
+                                perror("Cannot free what is already available");    
+                                return -1;
+                            }
+                        if (browse != 0)
+                            if (browse->next_record == previous)
+                                break;
+                cpt++;
+            }
+            if(cpt == cpt_max)
+            {
+                perror("Infinite loop\n");
+                return -1;
             }
             if(browse == 0) {
                 ptr2free->next_record = free_bloc[i].next_record;
@@ -294,9 +320,32 @@ int mem_free(void *ptr, unsigned long size)
             union bloc *previous = NULL;
             //On parcourt la liste des zones libres de taille size tant qu'on
             //ne tombe pas sur NULL ou la première zone du couple de compagnons
-            while (browse != 0 && browse != (union bloc*) ((unsigned long) ptr + size)) {
+            while (browse != 0 
+            && browse != (union bloc*) ((unsigned long) ptr + size) 
+            && browse != browse->next_record 
+            && browse->next_record != free_bloc[i].next_record
+            && cpt < cpt_max) {
                 previous = browse;
                 browse = browse->next_record;
+                /*if (browse != 0)*/
+                    if (browse == previous || browse == 0)
+                        break;
+                    if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
+                    {
+                        browse = 0;
+                        perror("Erreur paire\n");
+                    }
+                        if(browse == ptr2free)
+                            {
+                                perror("Cannot free what is already available");    
+                                return -1;
+                            }
+                cpt++;
+            }
+            if(cpt == cpt_max)
+            {
+                perror("Infinite loop\n");
+                return -1;
             }
             if(browse == 0) {
                 ptr2free->next_record = free_bloc[i].next_record;
