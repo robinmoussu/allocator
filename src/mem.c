@@ -62,7 +62,7 @@ int mem_init()
         memory_pool = (void *) malloc( ALLOC_MEM_SIZE );
     }
     if (memory_pool == 0) {
-        perror("Cannot initialise memory\n");
+        /*perror("Cannot initialise memory\n");*/
         return -1;
     }
 
@@ -111,13 +111,13 @@ void *mem_alloc(unsigned long size)
 
     // On s'assure que la mémoire soit initialisée
     if (memory_pool == 0) {
-        perror("Memory not initialized\n");
+        /*perror("Memory not initialized\n");*/
         return 0;
     }
 
     // On s'assure que la taille ne soit pas nulle
     if (size == 0) {
-        perror("Request of 0 byte allocation\n");
+       /* perror("Request of 0 byte allocation\n");*/
         return 0;
     }
     if (size < MIN_SIZE_ALLOC) {
@@ -154,7 +154,7 @@ void *mem_alloc(unsigned long size)
         if (i > BUDDY_MAX_INDEX) /*Ici avant c'était >=*/{
             // la taille demandée est plus grande que le plus grand bloc
             // disponible.
-            perror("Not enough availlable space\n");
+            /*perror("Not enough availlable space\n");*/
             return 0;
         }
 
@@ -191,12 +191,12 @@ int mem_free(void *ptr, unsigned long size)
     int cpt_max = ALLOC_MEM_SIZE / MIN_SIZE_ALLOC;
     
     if (size == 0) {
-        perror("Nothing to free\n");
+        /*perror("Nothing to free\n");*/
         return -1;
     }
     /*TOUT l'espace mémoire a libérer doit faire partie de l'espace mémoire qui a été aloué par le malloc de mem_init()*/
     else if((uint8_t *)ptr < memory_pool || (uint8_t*) ((unsigned long)ptr + size) > memory_pool + ALLOC_MEM_SIZE   || (uint8_t*) ptr > memory_pool + ALLOC_MEM_SIZE ) {
-        perror("Cannot free what hasn't been allocated\n");
+        /*perror("Cannot free what hasn't been allocated\n");*/
         return -1;
     }
     else if (size == ALLOC_MEM_SIZE && ptr2free == (union bloc*) memory_pool) {
@@ -208,106 +208,100 @@ int mem_free(void *ptr, unsigned long size)
     //nb_blocs_before est le nombre de blocs mémoire de taille size entre
     //le début du tableau free_bloc et l'adresse à libérer
     unsigned long nb_blocs_before = ((unsigned long) ptr2free - (unsigned long) memory_pool) / size;
+    int i = get_index(size);
+    union bloc *browse = free_bloc[i].next_record;
+    union bloc *previous = NULL;
     //Si nb_blocs_before est impaire, cela veut dire que ptr pointe vers la
     //deuxième zone d'un couple de compagnons => on doit donc regarder si
     //la première zone est libre.
     if ( nb_blocs_before % 2 == 1) {
-            int i = get_index(size);
-            union bloc *browse = free_bloc[i].next_record;
-            union bloc *previous = NULL;
-            //On parcourt la liste des zones libres de taille size tant qu'on
-            //ne tombe pas sur NULL ou la première zone du couple de compagnons ou une chaine infinie
-            while (browse != 0  && browse != (union bloc*) ((unsigned long) ptr - size) 
-                                && browse->next_record != free_bloc[i].next_record
-                                && browse != browse->next_record
-                                && cpt < cpt_max) {
-                previous = browse;
-                browse = browse->next_record;
-                if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
-                    {
-                        browse = 0;
-                        perror("Erreur impaire\n");
-                    }
-                if(browse == ptr2free)
-                    {
-                        perror("Cannot free what is already available");    
-                        return -1;
-                    }
-                if (browse != 0)
-                    if (browse->next_record == previous)
-                        break;
-                cpt++;
-            }
-            if(cpt == cpt_max)
-            {
-                perror("Infinite loop\n");
-                return -1;
-            }
-            if(browse == 0) {
-                ptr2free->next_record = free_bloc[i].next_record;
-                free_bloc[i].next_record = ptr2free;
-                return 0;
-            }
-            else {
-                if(previous != 0) {
-                    previous->next_record = browse->next_record;
+        //On parcourt la liste des zones libres de taille size tant qu'on
+        //ne tombe pas sur NULL ou la première zone du couple de compagnons ou dans une chaine infinie
+        while (browse != 0  && browse != (union bloc*) ((unsigned long) ptr - size) 
+                            && browse->next_record != free_bloc[i].next_record
+                            && browse != browse->next_record
+                            && cpt < cpt_max) {
+            previous = browse;
+            browse = browse->next_record;
+            /*On s'assure que les zone libres restent dans l'espace mémoire qui a été aloué par le malloc de mem_init()*/
+            if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
+                {
+                    browse = 0;
                 }
-                ptr2free = browse;
-                ptr2free->next_record = free_bloc[i + 1].next_record;
-                free_bloc[i + 1].next_record = ptr2free;
-                mem_free(ptr2free, size * 2);
-            }
+            /*Détecte rapidement les zones mémoires qui pointent sur elles-même (boucles infinies) => gain de temps d'exécution*/
+            if (browse != 0)
+                if (browse->next_record == previous)
+                    break;
+            cpt++;
         }
-        //Si le nombre est paire, cela veut dire que ptr pointe vers la
-        //première zone d'un couple de compagnons => on doit donc regarder
-        //si la deuxième zone est libre.
+        /*Détecte les boucles infinies*/
+        if(cpt == cpt_max)
+        {
+            /*perror("Infinite loop\n");*/
+            return -1;
+        }
+        /*Si le buddy n'est pas libre, on ne libère que la l'adresse ptr2free de taille size*/
+        if(browse == 0) {
+            ptr2free->next_record = free_bloc[i].next_record;
+            free_bloc[i].next_record = ptr2free;
+            return 0;
+        }
+        /*Si le buddy est libre, on recommence en essayant de libérer le ptr2free et son buddy pour une taille à libérer de 2*size */
         else {
-            int i = get_index(size);
-            union bloc *browse = free_bloc[i].next_record;
-            union bloc *previous = NULL;
-            //On parcourt la liste des zones libres de taille size tant qu'on
-            //ne tombe pas sur NULL ou la première zone du couple de compagnons ou une chaine infinie
-            while (browse != 0 
-            && browse != (union bloc*) ((unsigned long) ptr + size) 
-            && browse != browse->next_record 
-            && browse->next_record != free_bloc[i].next_record
-            && cpt < cpt_max) {
-                previous = browse;
-                browse = browse->next_record;
-                    if (browse == previous || browse == 0)
-                        break;
-                    if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
-                    {
-                        browse = 0;
-                        perror("Erreur paire\n");
-                    }
-                        if(browse == ptr2free)
-                            {
-                                perror("Cannot free what is already available");    
-                                return -1;
-                            }
-                cpt++;
+            if(previous != 0) {
+                previous->next_record = browse->next_record;
             }
-            if(cpt == cpt_max)
-            {
-                perror("Infinite loop\n");
-                return -1;
-            }
-            if(browse == 0) {
-                ptr2free->next_record = free_bloc[i].next_record;
-                free_bloc[i].next_record = ptr2free;
-                return 0;
-            }
-            else {
-                if(previous != 0) {
-                    previous->next_record = browse->next_record;
-                }
-                ptr2free->next_record = free_bloc[i + 1].next_record;
-                free_bloc[i + 1].next_record = ptr2free;
-                mem_free(ptr2free, size * 2);
-            }
+            ptr2free = browse;
+            ptr2free->next_record = free_bloc[i + 1].next_record;
+            free_bloc[i + 1].next_record = ptr2free;
+            mem_free(ptr2free, size * 2);
         }
-    
+    }
+    //Si le nombre est paire, cela veut dire que ptr pointe vers la
+    //première zone d'un couple de compagnons => on doit donc regarder
+    //si la deuxième zone est libre.
+    else {
+        //On parcourt la liste des zones libres de taille size tant qu'on
+        //ne tombe pas sur NULL ou la première zone du couple de compagnons ou dans une chaine infinie
+        while (browse != 0  && browse != (union bloc*) ((unsigned long) ptr + size) 
+                            && browse != browse->next_record 
+                            && browse->next_record != free_bloc[i].next_record
+                            && cpt < cpt_max) {
+            previous = browse;
+            browse = browse->next_record;
+            /*On s'assure que les zone libres restent dans l'espace mémoire qui a été aloué par le malloc de mem_init()*/
+            if((uint8_t *) browse < memory_pool || (uint8_t *) browse > memory_pool + ALLOC_MEM_SIZE)
+            {
+                browse = 0;
+            }
+            /*Détecte rapidement les zones mémoires qui pointent sur elles-même (boucles infinies) => gain de temps d'exécution*/
+            if (browse != 0)
+                if (browse->next_record == previous)
+                    break;
+            cpt++;
+        }
+        /*Détecte les boucles infinies*/
+        if(cpt == cpt_max)
+        {
+            /*perror("Infinite loop\n");*/
+            return -1;
+        }
+        /*Si le buddy n'est pas libre, on ne libère que la l'adresse ptr2free de taille size*/
+        if(browse == 0) {
+            ptr2free->next_record = free_bloc[i].next_record;
+            free_bloc[i].next_record = ptr2free;
+            return 0;
+        }
+        /*Si le buddy est libre, on recommence en essayant de libérer le ptr2free et son buddy pour une taille à libérer de 2*size */
+        else {
+            if(previous != 0) {
+                previous->next_record = browse->next_record;
+            }
+            ptr2free->next_record = free_bloc[i + 1].next_record;
+            free_bloc[i + 1].next_record = ptr2free;
+            mem_free(ptr2free, size * 2);
+        }
+    }
     return 0;
 }
 
